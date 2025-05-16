@@ -7,11 +7,11 @@
 # home_frame= Home(root)
 # capture_frame=Capture(root)
 import os
-image_path = "/home/shafieej/Molevision-GUI/images"
+image_path = "/home/ubuntu/Desktop/molevision-gui/images"
 
-captured_path= "/home/shafieej/Molevision-GUI/captured"
+captured_path= "//home/ubuntu/Desktop/molevision-gui/captured"
 
-captured_images_path= "/home/shafieej/Molevision-GUI/images/captured_images"
+captured_images_path= "/home/ubuntu/Desktop/molevision-gui/images/captured_images"
 
 if not os.path.exists(image_path):
     os.makedirs(image_path)
