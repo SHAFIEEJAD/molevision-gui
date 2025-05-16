@@ -21,7 +21,7 @@ class Capture:
         # Load model
         self.model = mobilenet_v3_large()
         self.model.classifier[3] = nn.Linear(self.model.classifier[3].in_features, 2)
-        self.model.load_state_dict(torch.load("latest_model_epoch20.pth", map_location=torch.device("cpu")))
+        self.model.load_state_dict(torch.load("/home/ubuntu/Desktop/molevision-gui/latest_model_epoch20.pth", map_location=torch.device("cpu")))
         self.model.eval()
 
         # Transformation to match training
