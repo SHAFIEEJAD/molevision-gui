@@ -2,6 +2,7 @@
 import customtkinter as tk
 from PIL import Image,ImageTk
 import cv2
+import numpy as np
 from matplotlib import pyplot as plt
 import os
 from src.utils.images_path import *
@@ -91,7 +92,6 @@ class Capture:
         close_button = tk.CTkButton(self.popup, text="Close", command=self.popup.destroy,fg_color=btn_color)
         close_button.pack(pady=10)
 
-
     def save_data(self):
         # Logic to save data goes here
         self.is_save=1
@@ -99,33 +99,98 @@ class Capture:
         print("Data saved")
     def recapturing(self):
         self.is_capture=0
+
+    def apply_preprocessing(self, image):
+        """Apply preprocessing filters to enhance the captured image."""
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Noise Reduction (Bilateral Filter)
+        denoised = cv2.bilateralFilter(gray, 9, 75, 75)
+
+        # Contrast Enhancement (CLAHE)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(denoised)
+
+        # Check Blurriness (Variance of Laplacian)
+        blur_metric = cv2.Laplacian(enhanced, cv2.CV_64F).var()
+        if blur_metric < 100:
+            print("⚠ Warning: Captured image may be blurry!")
+
+        # Sharpening (Unsharp Mask)
+        gaussian_blur = cv2.GaussianBlur(enhanced, (5, 5), 1.5)
+        sharpened = cv2.addWeighted(enhanced, 1.5, gaussian_blur, -0.5, 0)
+
+        return sharpened
+
     def update_video_stream(self):
-        current_time=''+datetime.today().strftime('%Y-%m-%d-%H:%M:%S')
-        path_to_store=''+captured_path+'/'+self.root.active_patient.patient_id
+        current_time = datetime.today().strftime('%Y-%m-%d-%H:%M:%S')
+        patient_id = self.root.active_patient.patient_id
+        path_to_store = os.path.join(captured_path, patient_id)
+
         ret, frame = self.cap.read()
-        
-        if ret & self.is_capture!=1:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame=cv2.resize(frame,(1045,636))
-            img = Image.fromarray(frame)
+
+        if ret and self.is_capture != 1:
+            # Display video feed
+            display_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            display_frame = cv2.resize(display_frame, (1045, 636))
+            img = Image.fromarray(display_frame)
             imgtk = ImageTk.PhotoImage(image=img)
             self.video_label.imgtk = imgtk
             self.video_label.configure(image=imgtk)
-           
-        elif ret & self.is_capture ==1:
-            ret, frame = self.cap.read()
-            if ret & self.is_save:
+
+        elif ret and self.is_capture == 1:
+            if self.is_save:
                 if not os.path.exists(path_to_store):
                     os.makedirs(path_to_store)
-                cv2.imwrite(os.path.join(path_to_store,f'{self.root.active_patient.patient_id+current_time}.jpg'), frame)
-                self.is_save=0
-                print(path_to_store)
+
+                # Save original image
+                original_filename = f"{patient_id}_{current_time}.jpg"
+                original_filepath = os.path.join(path_to_store, original_filename)
+                cv2.imwrite(original_filepath, frame)
+                print(f"✅ Original image saved at: {original_filepath}")
+
+                # Preprocess the image
+                processed_image = self.apply_preprocessing(frame)
+
+                # Save preprocessed (filtered) image
+                filtered_filename = f"{patient_id}_{current_time}_filtered.jpg"
+                filtered_filepath = os.path.join(path_to_store, filtered_filename)
+                cv2.imwrite(filtered_filepath, processed_image)
+                print(f"✅ Filtered image saved at: {filtered_filepath}")
+
+                self.is_save = 0
                 self.recapturing()
-                # plt.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                # plt.show()
-                # self.is_capture=0
-        # Call the function again after 10 ms
-        self.root.after(10, self.update_video_stream) 
+
+        # Continuously update video stream
+        self.root.after(10, self.update_video_stream)
+
+    # def update_video_stream(self):
+    #     current_time=''+datetime.today().strftime('%Y-%m-%d-%H:%M:%S')
+    #     path_to_store=''+captured_path+'/'+self.root.active_patient.patient_id
+    #     ret, frame = self.cap.read()
+        
+    #     if ret & self.is_capture!=1:
+    #         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    #         frame=cv2.resize(frame,(1045,636))
+    #         img = Image.fromarray(frame)
+    #         imgtk = ImageTk.PhotoImage(image=img)
+    #         self.video_label.imgtk = imgtk
+    #         self.video_label.configure(image=imgtk)
+           
+    #     elif ret & self.is_capture ==1:
+    #         ret, frame = self.cap.read()
+    #         if ret & self.is_save:
+    #             if not os.path.exists(path_to_store):
+    #                 os.makedirs(path_to_store)
+    #             cv2.imwrite(os.path.join(path_to_store,f'{self.root.active_patient.patient_id+current_time}.jpg'), frame)
+    #             self.is_save=0
+    #             print(path_to_store)
+    #             self.recapturing()
+    #             # plt.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    #             # plt.show()
+    #             # self.is_capture=0
+    #     # Call the function again after 10 ms
+    #     self.root.after(10, self.update_video_stream) 
 
     def capturing(self):
         self.is_capture=1
