@@ -8,10 +8,30 @@ import os
 from src.utils.images_path import *
 from src.utils.colors import *
 from datetime import datetime
+import torch
+import torch.nn as nn
+from torchvision.models import mobilenet_v3_large
+from torchvision import transforms
+
 class Capture:
     def __init__(self,root):
-                # capture frame
+        # capture frame
         self.root=root
+
+        # Load model
+        self.model = mobilenet_v3_large()
+        self.model.classifier[3] = nn.Linear(self.model.classifier[3].in_features, 2)
+        self.model.load_state_dict(torch.load("latest_model_epoch20.pth", map_location=torch.device("cpu")))
+        self.model.eval()
+
+        # Transformation to match training
+        self.transform = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((512, 512)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5]*3, [0.5]*3)
+        ])
+
         self.is_capture=0
         self.is_save=0
         ###connecting to the camera
@@ -101,26 +121,21 @@ class Capture:
         self.is_capture=0
 
     def apply_preprocessing(self, image):
-        """Apply preprocessing filters to enhance the captured image."""
+
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-        # Noise Reduction (Bilateral Filter)
         denoised = cv2.bilateralFilter(gray, 9, 75, 75)
-
-        # Contrast Enhancement (CLAHE)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         enhanced = clahe.apply(denoised)
-
         # Check Blurriness (Variance of Laplacian)
         blur_metric = cv2.Laplacian(enhanced, cv2.CV_64F).var()
         if blur_metric < 100:
             print("⚠ Warning: Captured image may be blurry!")
 
-        # Sharpening (Unsharp Mask)
         gaussian_blur = cv2.GaussianBlur(enhanced, (5, 5), 1.5)
         sharpened = cv2.addWeighted(enhanced, 1.5, gaussian_blur, -0.5, 0)
+        sharpened_rgb = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
+        return sharpened_rgb
 
-        return sharpened
 
     def update_video_stream(self):
         current_time = datetime.today().strftime('%Y-%m-%d-%H:%M:%S')
@@ -194,6 +209,27 @@ class Capture:
 
     def capturing(self):
         self.is_capture=1
+        # Get frame
+        ret, frame = self.cap.read()
+        if not ret:
+            print("❌ Failed to read from camera")
+            return
+
+        # Preprocess
+        processed = self.apply_preprocessing(frame)
+        transformed = self.transform(processed).unsqueeze(0)
+
+        # Predict
+        with torch.no_grad():
+            output = self.model(transformed)
+            pred = torch.argmax(output, dim=1).item()
+
+        result_text = "Malignant" if pred == 1 else "Benign"
+        print(f"✅ Prediction: {result_text}")
+
+        # Optional: show result on GUI
+        result_label = tk.CTkLabel(self.right_frame, text=f"Prediction: {result_text}", text_color="#00FF00" if pred == 0 else "#FF0000", font=("Arial", 16))
+        result_label.grid(row=3, column=0, pady=10)
 
     def display_message(self):
         print(f"hi hello  {self.message}")
